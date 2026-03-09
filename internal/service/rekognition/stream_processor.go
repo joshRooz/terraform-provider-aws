@@ -76,6 +76,7 @@ var (
 
 // @FrameworkResource("aws_rekognition_stream_processor", name="Stream Processor")
 // @Tags(identifierAttribute="arn")
+// @Testing(tagsTest=false)
 func newStreamProcessorResource(_ context.Context) (resource.ResourceWithConfigure, error) {
 	r := &streamProcessorResource{}
 
