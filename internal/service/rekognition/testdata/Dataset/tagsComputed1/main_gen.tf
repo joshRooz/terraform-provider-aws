@@ -5,7 +5,7 @@ provider "null" {}
 
 resource "aws_rekognition_dataset" "test" {
 
-  project_arn = aws_rekognition_project.test.arn
+  project_arn  = aws_rekognition_project.test.arn
   dataset_type = "TRAIN"
 
   tags = {
@@ -15,7 +15,7 @@ resource "aws_rekognition_dataset" "test" {
 
 resource "aws_rekognition_project" "test" {
 
-  name = var.rName
+  name    = var.rName
   feature = "CUSTOM_LABELS"
 }
 resource "null_resource" "test" {}

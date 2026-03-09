@@ -12,7 +12,7 @@ provider "aws" {
 
 resource "aws_rekognition_dataset" "test" {
 
-  project_arn = aws_rekognition_project.test.arn
+  project_arn  = aws_rekognition_project.test.arn
   dataset_type = "TRAIN"
 
   tags = var.resource_tags
@@ -20,7 +20,7 @@ resource "aws_rekognition_dataset" "test" {
 
 resource "aws_rekognition_project" "test" {
 
-  name = var.rName
+  name    = var.rName
   feature = "CUSTOM_LABELS"
 }
 variable "rName" {
