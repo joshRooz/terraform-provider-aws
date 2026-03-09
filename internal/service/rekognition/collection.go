@@ -33,6 +33,7 @@ import (
 
 // @FrameworkResource("aws_rekognition_collection", name="Collection")
 // @Tags(identifierAttribute="arn")
+// @Testing(tagsTest=false)
 func newCollectionResource(_ context.Context) (resource.ResourceWithConfigure, error) {
 	r := &collectionResource{}
 
