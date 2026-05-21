@@ -375,6 +375,40 @@ func TestAccPinpointApp_limitsEmpty(t *testing.T) {
 	})
 }
 
+func TestAccPinpointApp_limitsUpdate(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_limitsDaily(rName, 5),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "limits.0.daily", "5"),
+				),
+			},
+			{
+				Config: testAccAppConfig_limitsDaily(rName, 10),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "limits.0.daily", "10"),
+				),
+			},
+			{
+				Config:   testAccAppConfig_limitsDaily(rName, 10),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccPinpointApp_quietTime(t *testing.T) {
 	ctx := acctest.Context(t)
 	var application awstypes.ApplicationResponse
@@ -683,6 +717,21 @@ resource "aws_pinpoint_app" "test" {
   }
 }
 `, rName)
+}
+
+func testAccAppConfig_limitsDaily(rName string, daily int) string {
+	return fmt.Sprintf(`
+resource "aws_pinpoint_app" "test" {
+  name = %[1]q
+
+  limits {
+    daily               = %[2]d
+    maximum_duration    = 600
+    messages_per_second = 1
+    total               = 100
+  }
+}
+`, rName, daily)
 }
 
 func testAccAppConfig_limitsEmpty(rName string) string {
