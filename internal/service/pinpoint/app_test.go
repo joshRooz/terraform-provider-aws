@@ -267,6 +267,40 @@ func TestAccPinpointApp_campaignHookEmpty(t *testing.T) {
 	})
 }
 
+func TestAccPinpointApp_campaignHookUpdate(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_campaignHookLambdaMode(rName, string(awstypes.ModeDelivery)),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "campaign_hook.0.mode", string(awstypes.ModeDelivery)),
+				),
+			},
+			{
+				Config: testAccAppConfig_campaignHookLambdaMode(rName, string(awstypes.ModeFilter)),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "campaign_hook.0.mode", string(awstypes.ModeFilter)),
+				),
+			},
+			{
+				Config:   testAccAppConfig_campaignHookLambdaMode(rName, string(awstypes.ModeFilter)),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccPinpointApp_limits(t *testing.T) {
 	ctx := acctest.Context(t)
 	var application awstypes.ApplicationResponse
@@ -566,6 +600,64 @@ resource "aws_lambda_permission" "test" {
   source_arn    = "arn:${data.aws_partition.current.partition}:mobiletargeting:${data.aws_region.current.region}:${data.aws_caller_identity.aws.account_id}:/apps/*"
 }
 `, rName)
+}
+
+func testAccAppConfig_campaignHookLambdaMode(rName, mode string) string {
+	return fmt.Sprintf(`
+resource "aws_pinpoint_app" "test" {
+  name = %[1]q
+
+  campaign_hook {
+    lambda_function_name = aws_lambda_function.test.arn
+    mode                 = %[2]q
+  }
+
+  depends_on = [aws_lambda_permission.test]
+}
+
+resource "aws_lambda_function" "test" {
+  filename      = "test-fixtures/lambdapinpoint.zip"
+  function_name = %[1]q
+  role          = aws_iam_role.test.arn
+  handler       = "lambdapinpoint.handler"
+  runtime       = "nodejs24.x"
+  publish       = true
+}
+
+data "aws_partition" "current" {}
+
+resource "aws_iam_role" "test" {
+  name = %[1]q
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.${data.aws_partition.current.dns_suffix}"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+data "aws_caller_identity" "aws" {}
+
+data "aws_region" "current" {}
+
+resource "aws_lambda_permission" "test" {
+  statement_id  = "AllowExecutionFromPinpoint"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.test.function_name
+  principal     = "pinpoint.${data.aws_region.current.region}.${data.aws_partition.current.dns_suffix}"
+  source_arn    = "arn:${data.aws_partition.current.partition}:mobiletargeting:${data.aws_region.current.region}:${data.aws_caller_identity.aws.account_id}:/apps/*"
+}
+`, rName, mode)
 }
 
 func testAccAppConfig_campaignHookEmpty(rName string) string {
