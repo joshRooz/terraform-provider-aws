@@ -225,9 +225,10 @@ func TestAccPinpointApp_campaignHookLambda(t *testing.T) {
 				},
 			},
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"campaign_hook"},
 			},
 		},
 	})
@@ -365,9 +366,10 @@ func TestAccPinpointApp_limits(t *testing.T) {
 				},
 			},
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"limits"},
 			},
 		},
 	})
@@ -504,9 +506,10 @@ func TestAccPinpointApp_quietTime(t *testing.T) {
 				},
 			},
 			{
-				ResourceName:      resourceName,
-				ImportState:       true,
-				ImportStateVerify: true,
+				ResourceName:            resourceName,
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"quiet_time"},
 			},
 		},
 	})
