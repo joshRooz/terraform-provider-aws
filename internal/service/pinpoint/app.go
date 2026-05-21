@@ -191,22 +191,31 @@ func readAppWithConn(ctx context.Context, conn *pinpoint.Client, d *schema.Resou
 		return sdkdiag.AppendErrorf(diags, "reading Pinpoint App (%s): %s", d.Id(), err)
 	}
 
+	// App-API attributes — always populated from the successful GetApp response.
+	d.Set(names.AttrApplicationID, app.Id)
+	d.Set(names.AttrARN, app.Arn)
+	d.Set(names.AttrName, app.Name)
+	d.Set(names.AttrNamePrefix, create.NamePrefixFromName(aws.ToString(app.Name)))
+
+	// Settings-API attributes — wrapped with deprecation-tolerant handling.
 	settings, err := findAppSettingsByID(ctx, conn, d.Id())
+
+	if isSettingsAPIDeprecationError(err) {
+		log.Printf("[WARN] Pinpoint App (%s) Settings API returned deprecation-class error; "+
+			"preserving prior state for campaign_hook/limits/quiet_time: %s", d.Id(), err)
+		return diags
+	}
 
 	if err != nil {
 		return sdkdiag.AppendErrorf(diags, "reading Pinpoint App (%s) settings: %s", d.Id(), err)
 	}
 
-	d.Set(names.AttrApplicationID, app.Id)
-	d.Set(names.AttrARN, app.Arn)
 	if err := d.Set("campaign_hook", flattenCampaignHook(settings.CampaignHook)); err != nil {
 		return sdkdiag.AppendErrorf(diags, "setting campaign_hook: %s", err)
 	}
 	if err := d.Set("limits", flattenCampaignLimits(settings.Limits)); err != nil {
 		return sdkdiag.AppendErrorf(diags, "setting limits: %s", err)
 	}
-	d.Set(names.AttrName, app.Name)
-	d.Set(names.AttrNamePrefix, create.NamePrefixFromName(aws.ToString(app.Name)))
 	if err := d.Set("quiet_time", flattenQuietTime(settings.QuietTime)); err != nil {
 		return sdkdiag.AppendErrorf(diags, "setting quiet_time: %s", err)
 	}
