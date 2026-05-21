@@ -269,6 +269,39 @@ func TestAccPinpointApp_campaignHookEmpty(t *testing.T) {
 	})
 }
 
+func TestAccPinpointApp_campaignHookRemove(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_campaignHookLambda(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "campaign_hook.0.mode", string(awstypes.ModeDelivery)),
+				),
+			},
+			{
+				Config: testAccAppConfig_basic(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+				),
+			},
+			{
+				Config:   testAccAppConfig_basic(rName),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccPinpointApp_campaignHookUpdate(t *testing.T) {
 	ctx := acctest.Context(t)
 	var application awstypes.ApplicationResponse
@@ -377,6 +410,39 @@ func TestAccPinpointApp_limitsEmpty(t *testing.T) {
 	})
 }
 
+func TestAccPinpointApp_limitsRemove(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_limits(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "limits.0.daily", "3"),
+				),
+			},
+			{
+				Config: testAccAppConfig_basic(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+				),
+			},
+			{
+				Config:   testAccAppConfig_basic(rName),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccPinpointApp_limitsUpdate(t *testing.T) {
 	ctx := acctest.Context(t)
 	var application awstypes.ApplicationResponse
@@ -441,6 +507,40 @@ func TestAccPinpointApp_quietTime(t *testing.T) {
 				ResourceName:      resourceName,
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccPinpointApp_quietTimeRemove(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_quietTime(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.end", "03:00"),
+				),
+			},
+			{
+				Config: testAccAppConfig_basic(rName),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.end", ""),
+				),
+			},
+			{
+				Config:   testAccAppConfig_basic(rName),
+				PlanOnly: true,
 			},
 		},
 	})
