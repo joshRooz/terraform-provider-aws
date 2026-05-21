@@ -444,6 +444,42 @@ func TestAccPinpointApp_quietTime(t *testing.T) {
 	})
 }
 
+func TestAccPinpointApp_quietTimeUpdate(t *testing.T) {
+	ctx := acctest.Context(t)
+	var application awstypes.ApplicationResponse
+	rName := acctest.RandomWithPrefix(t, acctest.ResourcePrefix)
+	resourceName := "aws_pinpoint_app.test"
+
+	acctest.ParallelTest(ctx, t, resource.TestCase{
+		PreCheck:                 func() { acctest.PreCheck(ctx, t); testAccPreCheckApp(ctx, t) },
+		ErrorCheck:               acctest.ErrorCheck(t, names.PinpointServiceID),
+		ProtoV5ProviderFactories: acctest.ProtoV5ProviderFactories,
+		CheckDestroy:             testAccCheckAppDestroy(ctx, t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAppConfig_quietTimeEnd(rName, "08:00"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.start", "00:00"),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.end", "08:00"),
+				),
+			},
+			{
+				Config: testAccAppConfig_quietTimeEnd(rName, "09:00"),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAppExists(ctx, t, resourceName, &application),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.start", "00:00"),
+					resource.TestCheckResourceAttr(resourceName, "quiet_time.0.end", "09:00"),
+				),
+			},
+			{
+				Config:   testAccAppConfig_quietTimeEnd(rName, "09:00"),
+				PlanOnly: true,
+			},
+		},
+	})
+}
+
 func TestAccPinpointApp_quietTimeEmpty(t *testing.T) {
 	ctx := acctest.Context(t)
 	var application awstypes.ApplicationResponse
@@ -755,6 +791,19 @@ resource "aws_pinpoint_app" "test" {
   }
 }
 `, rName)
+}
+
+func testAccAppConfig_quietTimeEnd(rName, end string) string {
+	return fmt.Sprintf(`
+resource "aws_pinpoint_app" "test" {
+  name = %[1]q
+
+  quiet_time {
+    start = "00:00"
+    end   = %[2]q
+  }
+}
+`, rName, end)
 }
 
 func testAccAppConfig_quietTimeEmpty(rName string) string {
