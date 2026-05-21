@@ -7,6 +7,7 @@ package pinpoint
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -268,6 +269,24 @@ func applySettingsUpdate(ctx context.Context, conn *pinpoint.Client, d *schema.R
 	}
 
 	_, err := conn.UpdateApplicationSettings(ctx, input)
+
+	if isSettingsAPIDeprecationError(err) {
+		// SDKv2's d already holds the planned config values for
+		// campaign_hook / limits / quiet_time at this point — we never call
+		// d.Set to overwrite them, so they persist into state when the update
+		// path completes. readAppWithConn's then preserves them across future refreshes.
+		log.Printf("[WARN] Pinpoint App (%s) UpdateApplicationSettings returned "+
+			"deprecation-class error: %s", d.Id(), err)
+
+		return append(diags, diag.Diagnostic{
+			Severity: diag.Warning,
+			Summary:  fmt.Sprintf("Pinpoint App (%s) Settings API has been retired", d.Id()),
+			Detail: "AWS has deprecated the Pinpoint Application Settings API. The configured " +
+				"campaign_hook, limits, and quiet_time values are recorded in Terraform state " +
+				"but no longer take effect at AWS. Remove these blocks from your configuration " +
+				"at your convenience; existing configurations continue to apply successfully.",
+		})
+	}
 
 	if err != nil {
 		return sdkdiag.AppendErrorf(diags, "updating Pinpoint App (%s) settings: %s", d.Id(), err)
