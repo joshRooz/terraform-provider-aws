@@ -302,6 +302,95 @@ func TestApplySettingsUpdate_RealErrorStillFails(t *testing.T) {
 	}
 }
 
+// TestApplySettingsUpdate_PlannedValuesPersistOnDeprecation proves the
+// narrow U1 invariant that supports the full state-convergence claim:
+// values already on d (which in production are SDKv2's planned-config
+// values, lifted onto d before the Update CRUD method ran) are NOT
+// overwritten when U1 swallows the deprecation error.
+//
+// Note: TestResourceData does not give us SDKv2's full diff layer, so the
+// multi-step convergence (planned -> state -> next plan silent) is covered
+// by the real-AWS _campaignHookRemove / _limitsRemove / _quietTimeRemove
+// acceptance tests instead. This test isolates the "swallow does not
+// overwrite" invariant at the U1 layer.
+func TestApplySettingsUpdate_PlannedValuesPersistOnDeprecation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	conn := newTestClient(t, routeByPath(t, map[string]http.HandlerFunc{
+		"PUT /settings": awsErrorJSON("AccessDeniedException", "Settings API retired"),
+	}))
+
+	d := resourceApp().TestResourceData()
+	d.SetId(testAppID)
+	// Simulate SDKv2 having lifted the planned config onto d before
+	// the Update CRUD method fired.
+	if err := d.Set("quiet_time", []any{map[string]any{"start": "22:00", "end": "09:00"}}); err != nil {
+		t.Fatalf("seeding quiet_time: %s", err)
+	}
+
+	diags := applySettingsUpdate(ctx, conn, d)
+
+	if diags.HasError() {
+		t.Fatalf("diags.HasError() = true; want false. diags=%v", diags)
+	}
+	if len(diags) != 1 || diags[0].Severity != diag.Warning {
+		t.Fatalf("expected exactly one diag.Warning; got %d diags = %v", len(diags), diags)
+	}
+	qt := d.Get("quiet_time").([]any)
+	if len(qt) != 1 {
+		t.Fatalf("quiet_time len = %d; want 1 (U1 must not overwrite pre-set value)", len(qt))
+	}
+	if got := qt[0].(map[string]any)["end"]; got != "09:00" {
+		t.Errorf("quiet_time.0.end = %q; want %q (U1 must not overwrite pre-set value)", got, "09:00")
+	}
+}
+
+// TestReadAppWithConn_DriftOnNonSettingsAttrsStillDetected proves R1 scopes
+// its swallow precisely. On a deprecation-class GetApplicationSettings
+// error, R1 preserves the Settings attrs — but the App-API attrs are still
+// updated from the GetApp response. The mock has GetApp returning a Name
+// that differs from the pre-test seeded state; we assert the App-API attr
+// is overwritten (AWS drift surfaces) AND the Settings attr is preserved
+// (R1 doesn't over-swallow).
+func TestReadAppWithConn_DriftOnNonSettingsAttrsStillDetected(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	conn := newTestClient(t, routeByPath(t, map[string]http.HandlerFunc{
+		"GET ":          jsonHandler(http.StatusOK, appResponseJSON(testAppID, testAppARN, "name-from-aws")),
+		"GET /settings": awsErrorJSON("AccessDeniedException", "Settings API retired"),
+	}))
+
+	d := resourceApp().TestResourceData()
+	d.SetId(testAppID)
+	// Simulate prior state: App-API attr and Settings attr both seeded.
+	if err := d.Set(names.AttrName, "name-from-state"); err != nil {
+		t.Fatalf("seeding name: %s", err)
+	}
+	if err := d.Set("quiet_time", []any{map[string]any{"start": "00:00", "end": "06:00"}}); err != nil {
+		t.Fatalf("seeding quiet_time: %s", err)
+	}
+
+	diags := readAppWithConn(ctx, conn, d)
+
+	if diags.HasError() {
+		t.Fatalf("diags.HasError() = true; want false. diags=%v", diags)
+	}
+	// App-API attr should be overwritten with AWS truth (drift surfaces).
+	if got := d.Get(names.AttrName); got != "name-from-aws" {
+		t.Errorf("Name = %q; want %q (R1 must NOT over-swallow App-API attrs)", got, "name-from-aws")
+	}
+	// Settings attr should be preserved from pre-test seed (R1 skipped its d.Set).
+	qt := d.Get("quiet_time").([]any)
+	if len(qt) != 1 {
+		t.Fatalf("quiet_time len = %d; want 1 (R1 must preserve Settings attr)", len(qt))
+	}
+	if got := qt[0].(map[string]any)["end"]; got != "06:00" {
+		t.Errorf("quiet_time.0.end = %q; want %q (R1 must preserve Settings attr)", got, "06:00")
+	}
+}
+
 // TestUpdateAppWithConn_TagOnlyChangeDoesNotCallSettings proves the
 // HasChangesExcept(tags) guard at the top of updateAppWithConn: when no
 // non-tag change is present, applySettingsUpdate is not entered and
