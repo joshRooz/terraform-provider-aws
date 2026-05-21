@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/pinpoint"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/pinpoint/types"
+	"github.com/hashicorp/aws-sdk-go-base/v2/tfawserr"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
@@ -289,6 +290,19 @@ func findAppByID(ctx context.Context, conn *pinpoint.Client, id string) (*awstyp
 	}
 
 	return output.ApplicationResponse, nil
+}
+
+// FIXME: sharpen once the specific Pinpoint Settings API deprecation error code, or behavior, is confirmed by AWS.
+func isSettingsAPIDeprecationError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return tfawserr.ErrCodeEquals(err,
+		"AccessDeniedException",
+		"DeprecatedOperationException",
+		"ForbiddenException",
+		"MethodNotAllowedException",
+	)
 }
 
 func findAppSettingsByID(ctx context.Context, conn *pinpoint.Client, id string) (*awstypes.ApplicationSettingsResource, error) {

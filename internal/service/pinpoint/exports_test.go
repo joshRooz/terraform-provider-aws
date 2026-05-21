@@ -23,6 +23,8 @@ var (
 	FindGCMChannelByApplicationId             = findGCMChannelByApplicationId
 	FindSMSChannelByApplicationId             = findSMSChannelByApplicationId
 	FindEmailTemplateByName                   = findEmailTemplateByName
+
+	IsSettingsAPIDeprecationError = isSettingsAPIDeprecationError
 )
 
 const (

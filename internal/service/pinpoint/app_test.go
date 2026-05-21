@@ -5,12 +5,14 @@ package pinpoint_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/pinpoint"
 	awstypes "github.com/aws/aws-sdk-go-v2/service/pinpoint/types"
+	smithy "github.com/aws/smithy-go"
 	sdkid "github.com/hashicorp/terraform-plugin-sdk/v2/helper/id"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/knownvalue"
@@ -22,6 +24,35 @@ import (
 	tfpinpoint "github.com/hashicorp/terraform-provider-aws/internal/service/pinpoint"
 	"github.com/hashicorp/terraform-provider-aws/names"
 )
+
+func TestIsSettingsAPIDeprecationError(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"AccessDeniedException", &smithy.GenericAPIError{Code: "AccessDeniedException"}, true},
+		{"DeprecatedOperationException", &smithy.GenericAPIError{Code: "DeprecatedOperationException"}, true},
+		{"ForbiddenException typed", &awstypes.ForbiddenException{}, true},
+		{"MethodNotAllowedException", &smithy.GenericAPIError{Code: "MethodNotAllowedException"}, true},
+		{"NotFoundException typed (stays distinct)", &awstypes.NotFoundException{}, false},
+		{"ValidationException", &smithy.GenericAPIError{Code: "ValidationException"}, false},
+		{"wrapped AccessDenied", fmt.Errorf("retry wrapper: %w", &smithy.GenericAPIError{Code: "AccessDeniedException"}), true},
+		{"plain error", errors.New("network glitch"), false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tfpinpoint.IsSettingsAPIDeprecationError(tc.err); got != tc.want {
+				t.Errorf("IsSettingsAPIDeprecationError(%v) = %v; want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestAccPinpointApp_basic(t *testing.T) {
 	ctx := acctest.Context(t)
