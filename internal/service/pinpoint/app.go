@@ -172,8 +172,12 @@ func resourceAppCreate(ctx context.Context, d *schema.ResourceData, meta any) di
 }
 
 func resourceAppRead(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
-	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).PinpointClient(ctx)
+	return readAppWithConn(ctx, conn, d)
+}
+
+func readAppWithConn(ctx context.Context, conn *pinpoint.Client, d *schema.ResourceData) diag.Diagnostics {
+	var diags diag.Diagnostics
 
 	app, err := findAppByID(ctx, conn, d.Id())
 
@@ -211,41 +215,56 @@ func resourceAppRead(ctx context.Context, d *schema.ResourceData, meta any) diag
 }
 
 func resourceAppUpdate(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
-	var diags diag.Diagnostics
 	conn := meta.(*conns.AWSClient).PinpointClient(ctx)
+	return updateAppWithConn(ctx, conn, d)
+}
+
+func updateAppWithConn(ctx context.Context, conn *pinpoint.Client, d *schema.ResourceData) diag.Diagnostics {
+	var diags diag.Diagnostics
 
 	if d.HasChangesExcept(names.AttrTags, names.AttrTagsAll) {
-		appSettings := &awstypes.WriteApplicationSettingsRequest{}
-
-		if d.HasChange("campaign_hook") {
-			appSettings.CampaignHook = expandCampaignHook(d.Get("campaign_hook").([]any))
-		}
-
-		//if d.HasChange("cloudwatch_metrics_enabled") {
-		//	appSettings.CloudWatchMetricsEnabled = aws.Bool(d.Get("cloudwatch_metrics_enabled").(bool));
-		//}
-
-		if d.HasChange("limits") {
-			appSettings.Limits = expandCampaignLimits(d.Get("limits").([]any))
-		}
-
-		if d.HasChange("quiet_time") {
-			appSettings.QuietTime = expandQuietTime(d.Get("quiet_time").([]any))
-		}
-
-		input := &pinpoint.UpdateApplicationSettingsInput{
-			ApplicationId:                   aws.String(d.Id()),
-			WriteApplicationSettingsRequest: appSettings,
-		}
-
-		_, err := conn.UpdateApplicationSettings(ctx, input)
-
-		if err != nil {
-			return sdkdiag.AppendErrorf(diags, "updating Pinpoint App (%s) settings: %s", d.Id(), err)
+		diags = append(diags, applySettingsUpdate(ctx, conn, d)...)
+		if diags.HasError() {
+			return diags
 		}
 	}
 
-	return append(diags, resourceAppRead(ctx, d, meta)...)
+	return append(diags, readAppWithConn(ctx, conn, d)...)
+}
+
+func applySettingsUpdate(ctx context.Context, conn *pinpoint.Client, d *schema.ResourceData) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	appSettings := &awstypes.WriteApplicationSettingsRequest{}
+
+	if d.HasChange("campaign_hook") {
+		appSettings.CampaignHook = expandCampaignHook(d.Get("campaign_hook").([]any))
+	}
+
+	//if d.HasChange("cloudwatch_metrics_enabled") {
+	//	appSettings.CloudWatchMetricsEnabled = aws.Bool(d.Get("cloudwatch_metrics_enabled").(bool));
+	//}
+
+	if d.HasChange("limits") {
+		appSettings.Limits = expandCampaignLimits(d.Get("limits").([]any))
+	}
+
+	if d.HasChange("quiet_time") {
+		appSettings.QuietTime = expandQuietTime(d.Get("quiet_time").([]any))
+	}
+
+	input := &pinpoint.UpdateApplicationSettingsInput{
+		ApplicationId:                   aws.String(d.Id()),
+		WriteApplicationSettingsRequest: appSettings,
+	}
+
+	_, err := conn.UpdateApplicationSettings(ctx, input)
+
+	if err != nil {
+		return sdkdiag.AppendErrorf(diags, "updating Pinpoint App (%s) settings: %s", d.Id(), err)
+	}
+
+	return diags
 }
 
 func resourceAppDelete(ctx context.Context, d *schema.ResourceData, meta any) diag.Diagnostics {
