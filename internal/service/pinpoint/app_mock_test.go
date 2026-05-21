@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/pinpoint"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-provider-aws/names"
 )
 
@@ -104,6 +105,18 @@ func suffixAfterAppID(path string) string {
 // rather than asserting required keys), so this minimal shape is sufficient.
 func appResponseJSON(id, arn, name string) string {
 	return fmt.Sprintf(`{"Id":%q,"Arn":%q,"Name":%q}`, id, arn, name)
+}
+
+// appSettingsResponseJSON returns a GetApplicationSettings success body. The
+// Pinpoint deserializer (deserializers.go:7183) decodes the response body
+// directly as ApplicationSettingsResource (no envelope wrapper). All three
+// Settings sub-objects must be present as non-nil empty objects because the
+// in-repo flatteners (flattenCampaignHook, flattenCampaignLimits,
+// flattenQuietTime in app.go) dereference top-level struct fields without
+// a nil-guard. Empty objects deserialize as zero-valued structs which the
+// flatteners handle safely via aws.ToString / aws.ToInt32 of nil pointers.
+func appSettingsResponseJSON(id string) string {
+	return fmt.Sprintf(`{"ApplicationId":%q,"CampaignHook":{},"Limits":{},"QuietTime":{}}`, id)
 }
 
 const (
@@ -226,5 +239,100 @@ func TestReadAppWithConn_AppAPIForbiddenStillEscalates(t *testing.T) {
 
 	if !diags.HasError() {
 		t.Fatalf("diags.HasError() = false; want true. App-API errors must not be swallowed by R1.")
+	}
+}
+
+// TestApplySettingsUpdate_SwallowsDeprecationEmitsWarning proves U1's positive
+// invariant: on a deprecation-class UpdateApplicationSettings error,
+// applySettingsUpdate swallows the error, emits exactly one diag.Warning,
+// and returns no error. Seeds quiet_time on d so d.HasChange returns true
+// (the SDKv2 diff layer isn't available under TestResourceData, but d.Set
+// before the call simulates the SDKv2-lifted planned value).
+func TestApplySettingsUpdate_SwallowsDeprecationEmitsWarning(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	conn := newTestClient(t, routeByPath(t, map[string]http.HandlerFunc{
+		"PUT /settings": awsErrorJSON("AccessDeniedException", "Settings API retired"),
+	}))
+
+	d := resourceApp().TestResourceData()
+	d.SetId(testAppID)
+	if err := d.Set("quiet_time", []any{map[string]any{"start": "22:00", "end": "09:00"}}); err != nil {
+		t.Fatalf("seeding quiet_time: %s", err)
+	}
+
+	diags := applySettingsUpdate(ctx, conn, d)
+
+	if diags.HasError() {
+		t.Fatalf("diags.HasError() = true; want false. diags=%v", diags)
+	}
+	if len(diags) != 1 {
+		t.Fatalf("len(diags) = %d; want 1. diags=%v", len(diags), diags)
+	}
+	if diags[0].Severity != diag.Warning {
+		t.Errorf("diags[0].Severity = %v; want diag.Warning", diags[0].Severity)
+	}
+	if !strings.Contains(diags[0].Summary, "Settings API has been retired") {
+		t.Errorf("diags[0].Summary = %q; want it to mention \"Settings API has been retired\"", diags[0].Summary)
+	}
+}
+
+// TestApplySettingsUpdate_RealErrorStillFails proves U1's negative invariant:
+// non-deprecation errors from UpdateApplicationSettings still escalate to
+// diag.Error.
+func TestApplySettingsUpdate_RealErrorStillFails(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	conn := newTestClient(t, routeByPath(t, map[string]http.HandlerFunc{
+		"PUT /settings": awsErrorJSON("ValidationException", "bad request"),
+	}))
+
+	d := resourceApp().TestResourceData()
+	d.SetId(testAppID)
+	if err := d.Set("quiet_time", []any{map[string]any{"start": "22:00", "end": "09:00"}}); err != nil {
+		t.Fatalf("seeding quiet_time: %s", err)
+	}
+
+	diags := applySettingsUpdate(ctx, conn, d)
+
+	if !diags.HasError() {
+		t.Fatalf("diags.HasError() = false; want true. diags=%v", diags)
+	}
+}
+
+// TestUpdateAppWithConn_TagOnlyChangeDoesNotCallSettings proves the
+// HasChangesExcept(tags) guard at the top of updateAppWithConn: when no
+// non-tag change is present, applySettingsUpdate is not entered and
+// UpdateApplicationSettings is not called. Coverage gap 4h.
+//
+// Implementation: routeByPath has NO entry for "PUT /settings", so if the
+// code path reaches UpdateApplicationSettings the harness's default t.Errorf
+// fires. The Read tail-call still runs, so GET / and GET /settings routes
+// are registered with happy-path responses.
+//
+// Note: with a bare TestResourceData (d.diff == nil), HasChangesExcept
+// returns false, mimicking the tag-only-diff short-circuit. A strict
+// tag-only-diff test would require hand-building a *terraform.InstanceDiff;
+// the marginal extra signal isn't worth the infrastructure cost.
+func TestUpdateAppWithConn_TagOnlyChangeDoesNotCallSettings(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	conn := newTestClient(t, routeByPath(t, map[string]http.HandlerFunc{
+		"GET ":          jsonHandler(http.StatusOK, appResponseJSON(testAppID, testAppARN, "n")),
+		"GET /settings": jsonHandler(http.StatusOK, appSettingsResponseJSON(testAppID)),
+		// No "PUT /settings" route — routeByPath's t.Errorf will fire if
+		// updateAppWithConn reaches UpdateApplicationSettings despite the guard.
+	}))
+
+	d := resourceApp().TestResourceData()
+	d.SetId(testAppID)
+
+	diags := updateAppWithConn(ctx, conn, d)
+
+	if diags.HasError() {
+		t.Fatalf("diags.HasError() = true; want false. diags=%v", diags)
 	}
 }
