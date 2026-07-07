@@ -9,10 +9,12 @@ var (
 	ResourceProject         = newProjectResource
 	ResourceCollection      = newCollectionResource
 	ResourceStreamProcessor = newStreamProcessorResource
+	ResourceDataset         = newDatasetResource
 )
 
 var (
 	FindCollectionByID        = findCollectionByID
 	FindProjectByName         = findProjectByName
 	FindStreamProcessorByName = findStreamProcessorByName
+	FindDatasetByARN          = findDatasetByARN
 )
